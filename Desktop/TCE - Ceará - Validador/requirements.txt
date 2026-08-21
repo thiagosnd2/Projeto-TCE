@@ -1,0 +1,3 @@
+git add .
+git commit -m "Adicionando requisitos para deploy"
+git push origin main
