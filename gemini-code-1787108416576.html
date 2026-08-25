@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Validador SIM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <header class="border-b border-slate-800 bg-slate-950 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="p-2 bg-indigo-600 rounded-lg"><i class="fa-solid fa-file-circle-check text-xl"></i></div>
+      <h1 class="text-xl font-bold tracking-wide">Validador SIM</h1>
+    </div>
+  </header>
+
+  <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+
+    <!-- Zona de Drop -->
+    <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 bg-slate-800/50 hover:bg-slate-800 rounded-xl p-10 text-center cursor-pointer transition-all">
+      <input type="file" id="fileInput" accept=".csv" class="hidden">
+      <i class="fa-solid fa-cloud-arrow-up text-5xl text-indigo-400 mb-4"></i>
+      <h3 class="text-lg font-semibold">Arraste e solte seu arquivo CSV aqui</h3>
+      <p class="text-sm text-slate-400 mt-1">O arquivo será validado no backend via FastAPI</p>
+    </div>
+
+    <!-- Indicator de Carregamento -->
+    <div id="loading" class="hidden text-center py-8">
+      <i class="fa-solid fa-circle-notch animate-spin text-4xl text-indigo-500 mb-2"></i>
+      <p class="text-sm text-slate-400">Processando regras e schemas no servidor...</p>
+    </div>
+
+    <!-- Dashboard com os dados da API -->
+    <section id="metricsSection" class="hidden grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+        <p class="text-xs text-slate-400 uppercase font-bold">Total de Linhas</p>
+        <p id="totalRows" class="text-2xl font-extrabold mt-1">0</p>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/10">
+        <p class="text-xs text-emerald-400 uppercase font-bold">Registros Válidos</p>
+        <p id="validRows" class="text-2xl font-extrabold text-emerald-400 mt-1">0</p>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl border border-rose-500/30 bg-rose-950/10">
+        <p class="text-xs text-rose-400 uppercase font-bold">Com Inconsistências</p>
+        <p id="errorRows" class="text-2xl font-extrabold text-rose-400 mt-1">0</p>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+        <p class="text-xs text-slate-400 uppercase font-bold">Taxa de Conformidade</p>
+        <p id="accuracyRate" class="text-2xl font-extrabold text-indigo-400 mt-1">0%</p>
+      </div>
+    </section>
+
+    <!-- Tabela de Resultados -->
+    <section id="tableSection" class="hidden bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div class="overflow-x-auto max-h-[500px]">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead class="bg-slate-950 text-slate-400 sticky top-0 uppercase tracking-wider">
+            <tr id="tableHeader"></tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-slate-700/50"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_URL = "http://127.0.0.1:8000/api/validar";
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const loading = document.getElementById('loading');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-indigo-500'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-indigo-500'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-indigo-500');
+      if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) uploadFile(e.target.files[0]);
+    });
+
+    async function uploadFile(file) {
+      loading.classList.remove('hidden');
+      
+      // Prepara o formulário para enviar o arquivo via multipart/form-data
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'Erro na resposta do servidor');
+        }
+
+        const data = await response.json();
+        renderResults(data);
+      } catch (err) {
+        alert(`Erro na validação: ${err.message}`);
+      } finally {
+        loading.classList.add('hidden');
+      }
+    }
+
+    function renderResults(data) {
+      document.getElementById('metricsSection').classList.remove('hidden');
+      document.getElementById('tableSection').classList.remove('hidden');
+
+      // Métricas
+      document.getElementById('totalRows').innerText = data.total_rows;
+      document.getElementById('validRows').innerText = data.valid_rows;
+      document.getElementById('errorRows').innerText = data.error_rows;
+      
+      const rate = data.total_rows > 0 ? ((data.valid_rows / data.total_rows) * 100).toFixed(1) : 0;
+      document.getElementById('accuracyRate').innerText = `${rate}%`;
+
+      // Cabeçalho
+      const headerRow = document.getElementById('tableHeader');
+      headerRow.innerHTML = '<th class="p-3">#</th><th class="p-3">Status</th>' + 
+        data.headers.map(h => `<th class="p-3">${h}</th>`).join('');
+
+      // Linhas da Tabela
+      const body = document.getElementById('tableBody');
+      body.innerHTML = data.rows.map(r => `
+        <tr class="${r.status === 'error' ? 'bg-rose-950/20' : 'hover:bg-slate-700/30'}">
+          <td class="p-3 text-slate-500 font-mono">${r.id}</td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'error' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}">
+              ${r.status === 'error' ? 'Erro' : 'OK'}
+            </span>
+          </td>
+          ${r.data.map(val => `<td class="p-3">${val !== null ? val : ''}</td>`).join('')}
+        </tr>
+      `).join('');
+    }
+  </script>
+</body>
+</html>

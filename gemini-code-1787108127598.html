@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Validador SIM - Dashboard Interativo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-950 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="p-2 bg-indigo-600 rounded-lg"><i class="fa-solid fa-file-circle-check text-xl"></i></div>
+      <h1 class="text-xl font-bold tracking-wide">Validador SIM <span class="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-full border border-indigo-500/30">v1.0</span></h1>
+    </div>
+    <button id="exportBtn" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg transition-all flex items-center gap-2">
+      <i class="fa-solid fa-download"></i> Exportar CSV Corrigido
+    </button>
+  </header>
+
+  <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+
+    <!-- Upload Box -->
+    <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 bg-slate-800/50 hover:bg-slate-800 rounded-xl p-10 text-center cursor-pointer transition-all">
+      <input type="file" id="fileInput" accept=".csv" class="hidden">
+      <i class="fa-solid fa-cloud-arrow-up text-5xl text-indigo-400 mb-4 animate-bounce"></i>
+      <h3 class="text-lg font-semibold">Arraste e solte seu arquivo CSV aqui</h3>
+      <p class="text-sm text-slate-400 mt-1">Ou clique para selecionar um arquivo `.csv` do computador</p>
+    </div>
+
+    <!-- Dashboard Metrics (Invisível até o upload) -->
+    <section id="metricsSection" class="hidden grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+        <p class="text-xs text-slate-400 uppercase font-bold">Total de Linhas</p>
+        <p id="totalRows" class="text-2xl font-extrabold mt-1">0</p>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/10">
+        <p class="text-xs text-emerald-400 uppercase font-bold">Registros Válidos</p>
+        <p id="validRows" class="text-2xl font-extrabold text-emerald-400 mt-1">0</p>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl border border-rose-500/30 bg-rose-950/10">
+        <p class="text-xs text-rose-400 uppercase font-bold">Com Inconsistências</p>
+        <p id="errorRows" class="text-2xl font-extrabold text-rose-400 mt-1">0</p>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+        <p class="text-xs text-slate-400 uppercase font-bold">Taxa de Conformidade</p>
+        <p id="accuracyRate" class="text-2xl font-extrabold text-indigo-400 mt-1">0%</p>
+      </div>
+    </section>
+
+    <!-- Controls & Data Table (Invisível até o upload) -->
+    <section id="tableSection" class="hidden bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div class="p-4 border-b border-slate-700 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-2">
+          <button onclick="filterTable('all')" class="filter-btn px-3 py-1.5 bg-indigo-600 text-xs font-semibold rounded-lg">Todos</button>
+          <button onclick="filterTable('error')" class="filter-btn px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-semibold rounded-lg text-rose-300">Apenas Erros</button>
+          <button onclick="filterTable('valid')" class="filter-btn px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-semibold rounded-lg text-emerald-300">Apenas Válidos</button>
+        </div>
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+          <input type="text" id="searchInput" placeholder="Buscar registros..." class="bg-slate-900 text-xs pl-8 pr-4 py-2 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500 text-slate-200">
+        </div>
+      </div>
+
+      <div class="overflow-x-auto max-h-[500px]">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead class="bg-slate-950 text-slate-400 sticky top-0 uppercase tracking-wider">
+            <tr id="tableHeader">
+              <!-- Cabeçalho dinâmico via JS -->
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-slate-700/50">
+            <!-- Linhas dinâmicas via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-indigo-500'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-indigo-500'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-indigo-500');
+      if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) processFile(e.target.files[0]);
+    });
+
+    function processFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        parseAndValidateCSV(text);
+      };
+      reader.readAsText(file);
+    }
+
+    function parseAndValidateCSV(csvText) {
+      const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length === 0) return;
+
+      const headers = lines[0].split(',');
+      const rows = lines.slice(1).map((line, idx) => {
+        const values = line.split(',');
+        // Exemplo de regra simulada baseada nas validações do seu projeto
+        const hasError = values.some(v => v === '' || v === 'NULL') || values.length !== headers.length;
+        return { id: idx + 1, data: values, status: hasError ? 'error' : 'valid' };
+      });
+
+      renderDashboard(headers, rows);
+    }
+
+    function renderDashboard(headers, rows) {
+      document.getElementById('metricsSection').classList.remove('hidden');
+      document.getElementById('tableSection').classList.remove('hidden');
+      document.getElementById('exportBtn').classList.remove('hidden');
+
+      const total = rows.length;
+      const errors = rows.filter(r => r.status === 'error').length;
+      const valids = total - errors;
+
+      document.getElementById('totalRows').innerText = total;
+      document.getElementById('validRows').innerText = valids;
+      document.getElementById('errorRows').innerText = errors;
+      document.getElementById('accuracyRate').innerText = ((valids / total) * 100).toFixed(1) + '%';
+
+      // Render Header
+      const headerRow = document.getElementById('tableHeader');
+      headerRow.innerHTML = '<th class="p-3">#</th><th class="p-3">Status</th>' + 
+        headers.map(h => `<th class="p-3">${h}</th>`).join('');
+
+      // Render Body
+      const body = document.getElementById('tableBody');
+      body.innerHTML = rows.map(r => `
+        <tr class="hover:bg-slate-700/30 transition-all ${r.status === 'error' ? 'bg-rose-950/20' : ''}" data-status="${r.status}">
+          <td class="p-3 text-slate-500 font-mono">${r.id}</td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'error' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}">
+              ${r.status === 'error' ? 'Erro' : 'OK'}
+            </span>
+          </td>
+          ${r.data.map(val => `
+            <td class="p-3 contenteditable="true" ${val === '' || val === 'NULL' ? 'class="text-rose-400 font-bold underline decoration-wavy"' : ''}>${val}</td>
+          `).join('')}
+        </tr>
+      `).join('');
+    }
+
+    function filterTable(type) {
+      const rows = document.querySelectorAll('#tableBody tr');
+      rows.forEach(r => {
+        if (type === 'all') r.style.display = '';
+        else if (type === r.dataset.status) r.style.display = '';
+        else r.style.display = 'none';
+      });
+    }
+  </script>
+</body>
+</html>
